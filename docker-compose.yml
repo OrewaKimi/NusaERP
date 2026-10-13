@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nusaerp
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      APP_KEY: base64:Q9S7j8KaLIwc1x0H0zE6BgJpVdfejYJ8dA4efmM/4kU=
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: nusaerp
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      AUTOMATION_TOKEN: ${AUTOMATION_TOKEN:-nusaerp-secret}
+      N8N_PAYMENT_SUCCESS_WEBHOOK: http://n8n:5678/webhook/payment-success
+      N8N_PO_SUBMITTED_WEBHOOK: http://n8n:5678/webhook/po-submitted
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
+      MIDTRANS_SNAP_URL: ${MIDTRANS_SNAP_URL:-https://app.sandbox.midtrans.com/snap/v1/transactions}
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./backend:/var/www/html
+    command: sh -c "composer install --no-interaction --prefer-dist --no-progress && php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - '5678:5678'
+    environment:
+      N8N_HOST: 0.0.0.0
+      N8N_PORT: 5678
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-nusaerp-lite-demo-key}
+      N8N_BASIC_AUTH_ACTIVE: 'false'
+      WEBHOOK_URL: http://localhost:5678/
+      NUSAERP_AUTOMATION_TOKEN: ${AUTOMATION_TOKEN:-nusaerp-secret}
+      FRONTEND_URL: http://localhost:5173
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: 'false'
+    volumes:
+      - ./n8n/workflows:/home/node/.n8n/workflows
+
+volumes:
+  postgres_data:

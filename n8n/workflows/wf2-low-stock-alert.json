@@ -1,0 +1,68 @@
+{
+  "name": "WF2 Low Stock Alert",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } },
+      "id": "schedule-low-stock",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/api/automation/low-stock",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-Automation-Token", "value": "={{$env.NUSAERP_AUTOMATION_TOKEN}}" }] },
+        "options": { "response": { "response": { "neverError": false } } }
+      },
+      "id": "get-low-stock",
+      "name": "Get Low Stock",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [{ "leftValue": "={{$json.count}}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-low-stock",
+      "name": "Any Low Stock?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "event", "name": "event", "value": "low_stock_alert", "type": "string" },
+            { "id": "count", "name": "count", "value": "={{$json.count}}", "type": "number" },
+            { "id": "summary", "name": "summary", "value": "={{$json.items.map(item => `${item.sku}: ${item.stock}/${item.min_stock}`).join(', ')}}", "type": "string" },
+            { "id": "items", "name": "items", "value": "={{$json.items}}", "type": "array" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-low-stock-alert",
+      "name": "Format Low Stock Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [940, 100]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": { "main": [[{ "node": "Get Low Stock", "type": "main", "index": 0 }]] },
+    "Get Low Stock": { "main": [[{ "node": "Any Low Stock?", "type": "main", "index": 0 }]] },
+    "Any Low Stock?": { "main": [[{ "node": "Format Low Stock Alert", "type": "main", "index": 0 }], []] }
+  },
+  "pinData": {},
+  "meta": {"instanceId": "nusaerp-lite"},
+  "active": true,
+  "versionId": "2"
+}

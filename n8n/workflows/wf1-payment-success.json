@@ -1,0 +1,87 @@
+{
+  "name": "WF1 Payment Success",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment-success",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-payment-success",
+      "name": "Payment Settled Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 200],
+      "webhookId": "nusaerp-payment-success"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [{ "leftValue": "={{$json.headers['x-automation-token']}}", "rightValue": "={{$env.NUSAERP_AUTOMATION_TOKEN}}", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-payment-event-token",
+      "name": "Validate Event Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "event", "name": "event", "value": "payment_success", "type": "string" },
+            { "id": "invoice_id", "name": "invoice_id", "value": "={{$json.body.invoice_id}}", "type": "number" },
+            { "id": "invoice_number", "name": "invoice_number", "value": "={{$json.body.invoice_number}}", "type": "string" },
+            { "id": "order_id", "name": "order_id", "value": "={{$json.body.order_id}}", "type": "string" },
+            { "id": "amount", "name": "amount", "value": "={{$json.body.amount}}", "type": "number" },
+            { "id": "customer", "name": "customer", "value": "={{$json.body.customer}}", "type": "string" },
+            { "id": "processed_at", "name": "processed_at", "value": "={{$now.toISO()}}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "normalize-payment-event",
+      "name": "Record Payment Event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [640, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: true, event: 'payment_success', order_id: $json.order_id } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-payment-accepted",
+      "name": "Acknowledge Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 120]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={\"message\":\"Unauthorized\"}", "options": { "responseCode": 401 } },
+      "id": "reject-payment-event",
+      "name": "Reject Invalid Token",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [640, 320]
+    }
+  ],
+  "connections": {
+    "Payment Settled Webhook": { "main": [[{ "node": "Validate Event Token", "type": "main", "index": 0 }]] },
+    "Validate Event Token": { "main": [[{ "node": "Record Payment Event", "type": "main", "index": 0 }], [{ "node": "Reject Invalid Token", "type": "main", "index": 0 }]] },
+    "Record Payment Event": { "main": [[{ "node": "Acknowledge Event", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "nusaerp-lite"
+  },
+  "active": true,
+  "versionId": "2"
+}
