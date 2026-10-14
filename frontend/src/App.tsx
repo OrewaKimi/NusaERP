@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, Boxes, CircleDollarSign, LayoutDashboard, LogOut, Search, ShoppingCart, Truck, UsersRound } from 'lucide-react'
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type Product = {
@@ -92,6 +93,12 @@ const currency = new Intl.NumberFormat('id-ID', {
   currency: 'IDR',
   maximumFractionDigits: 0,
 })
+const dashboardDateLabel = new Intl.DateTimeFormat('id-ID', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+}).format(new Date())
 
 const getHeaders = (token: string | null) => ({
   Authorization: token ? `Bearer ${token}` : undefined,
@@ -181,33 +188,76 @@ function App() {
 }
 
 function AppShell({ token, role, onLogout }: { token: string; role: UserRole; onLogout: () => void }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const { data: summary, isPending: summaryPending } = useQuery({
+    queryKey: ['summary', token],
+    queryFn: async () => {
+      const response = await axios.get(`${API_BASE}/dashboard/summary`, { headers: getHeaders(token) })
+      return response.data as Summary
+    },
+  })
+  const navigation = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'sales', 'gudang'] as UserRole[] },
+    { to: '/products', label: 'Produk', icon: Boxes, roles: ['admin', 'gudang'] as UserRole[] },
+    { to: '/customers', label: 'Pelanggan', icon: UsersRound, roles: ['admin', 'sales'] as UserRole[] },
+    { to: '/suppliers', label: 'Supplier', icon: Truck, roles: ['admin', 'gudang'] as UserRole[] },
+    { to: '/sales', label: 'Penjualan', icon: CircleDollarSign, roles: ['admin', 'sales'] as UserRole[] },
+    { to: '/purchases', label: 'Pembelian', icon: ShoppingCart, roles: ['admin', 'gudang'] as UserRole[] },
+  ].filter((item) => item.roles.includes(role))
+  const matchingLinks = navigation.filter((item) => item.label.toLowerCase().includes(searchTerm.trim().toLowerCase()))
+  const actionableCount = (role === 'admin' || role === 'sales' ? summary?.unpaid_invoices ?? 0 : 0)
+    + (role === 'admin' || role === 'gudang' ? summary?.low_stock_products ?? 0 : 0)
+  const roleLabel = role === 'gudang' ? 'Gudang' : role === 'sales' ? 'Sales' : 'Administrator'
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div>
-          <div className="brand">NusaERP Lite</div>
-          <nav className="nav">
-            <Link to="/">Dashboard</Link>
-            {(role === 'admin' || role === 'gudang') && <Link to="/products">Inventory</Link>}
-            {(role === 'admin' || role === 'sales') && <Link to="/customers">Customers</Link>}
-            {(role === 'admin' || role === 'gudang') && <Link to="/suppliers">Suppliers</Link>}
-            {(role === 'admin' || role === 'sales') && <Link to="/sales">Sales</Link>}
-            {(role === 'admin' || role === 'gudang') && <Link to="/purchases">Purchasing</Link>}
+        <div className="sidebar-top">
+          <Link to="/" className="brand" aria-label="NusaERP Lite, beranda"><span className="brand-mark"><Activity size={19} strokeWidth={2.4} /></span><span>NusaERP <small>LITE</small></span></Link>
+          <div className="nav-caption">RUANG KERJA</div>
+          <nav className="nav" aria-label="Navigasi utama">
+            {navigation.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'}><Icon size={18} strokeWidth={1.8} /><span>{label}</span></NavLink>)}
           </nav>
         </div>
-        <button type="button" className="logout-btn" onClick={onLogout}>Logout</button>
+        <div className="sidebar-bottom">
+          <div className="account-card"><span className="avatar">{roleLabel.slice(0, 1)}</span><span className="account-copy"><strong>{roleLabel}</strong><small>Akses NusaERP</small></span></div>
+          <button type="button" className="logout-btn" onClick={onLogout}><LogOut size={17} /><span>Keluar</span></button>
+        </div>
       </aside>
 
-      <main className="page">
-        <Routes>
-          <Route path="/" element={<DashboardPage token={token} role={role} />} />
-          <Route path="/products" element={role === 'admin' || role === 'gudang' ? <ProductsPage token={token} /> : <Navigate to="/" replace />} />
-          <Route path="/customers" element={role === 'admin' || role === 'sales' ? <ContactsPage token={token} resource="customers" title="Customers" /> : <Navigate to="/" replace />} />
-          <Route path="/suppliers" element={role === 'admin' || role === 'gudang' ? <ContactsPage token={token} resource="suppliers" title="Suppliers" /> : <Navigate to="/" replace />} />
-          <Route path="/sales" element={role === 'admin' || role === 'sales' ? <SalesPage token={token} /> : <Navigate to="/" replace />} />
-          <Route path="/purchases" element={role === 'admin' || role === 'gudang' ? <PurchasesPage token={token} /> : <Navigate to="/" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+      <main className="workspace">
+        <header className="topbar">
+          <div className="utility-search-wrap">
+            <Search size={17} aria-hidden="true" />
+            <input aria-label="Cari modul" placeholder="Cari modul..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
+            {searchTerm && <div className="search-results">{matchingLinks.length ? matchingLinks.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={() => setSearchTerm('')}><Icon size={16} />{label}</NavLink>) : <span>Tidak ada modul yang cocok.</span>}</div>}
+          </div>
+          <div className="topbar-actions">
+            <div className="notification-wrap">
+              <button type="button" className="icon-button notification-button" aria-label={`Notifikasi ERP${summaryPending ? '' : `, ${actionableCount} tindakan`}`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>
+                <Bell size={18} />{!summaryPending && actionableCount > 0 && <span className="notification-count">{actionableCount > 99 ? '99+' : actionableCount}</span>}
+              </button>
+              {notificationsOpen && <div className="notification-popover"><strong>Perlu perhatian</strong>
+                {(role === 'admin' || role === 'sales') && <Link to="/sales" onClick={() => setNotificationsOpen(false)}><span>Invoice belum dibayar</span><b>{summary?.unpaid_invoices ?? '—'}</b></Link>}
+                {(role === 'admin' || role === 'gudang') && <Link to="/products" onClick={() => setNotificationsOpen(false)}><span>Produk stok menipis</span><b>{summary?.low_stock_products ?? '—'}</b></Link>}
+                {!summaryPending && actionableCount === 0 && <p>Tidak ada tindakan yang tertunda.</p>}
+              </div>}
+            </div>
+            <div className="topbar-account"><span className="avatar avatar-small">{roleLabel.slice(0, 1)}</span><span><strong>{roleLabel}</strong><small>Workspace</small></span></div>
+          </div>
+        </header>
+        <div className="page">
+          <Routes>
+            <Route path="/" element={<DashboardPage token={token} role={role} />} />
+            <Route path="/products" element={role === 'admin' || role === 'gudang' ? <ProductsPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/customers" element={role === 'admin' || role === 'sales' ? <ContactsPage token={token} resource="customers" title="Customers" /> : <Navigate to="/" replace />} />
+            <Route path="/suppliers" element={role === 'admin' || role === 'gudang' ? <ContactsPage token={token} resource="suppliers" title="Suppliers" /> : <Navigate to="/" replace />} />
+            <Route path="/sales" element={role === 'admin' || role === 'sales' ? <SalesPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/purchases" element={role === 'admin' || role === 'gudang' ? <PurchasesPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
       </main>
     </div>
   )
@@ -227,7 +277,7 @@ function LoginPage({ onLogin }: { onLogin: (token: string, role: UserRole) => vo
     try {
       const response = await axios.post(`${API_BASE}/login`, { email, password })
       onLogin(response.data.token, response.data.user.role)
-    } catch (err) {
+    } catch {
       setError('Login gagal. Cek email dan password demo.')
     } finally {
       setLoading(false)
@@ -259,7 +309,7 @@ function LoginPage({ onLogin }: { onLogin: (token: string, role: UserRole) => vo
 }
 
 function DashboardPage({ token, role }: { token: string; role: UserRole }) {
-  const { data: summary } = useQuery({
+  const { data: summary, isPending: summaryPending, isError: summaryError } = useQuery({
     queryKey: ['summary', token],
     queryFn: async () => {
       const response = await axios.get(`${API_BASE}/dashboard/summary`, { headers: getHeaders(token) })
@@ -267,7 +317,7 @@ function DashboardPage({ token, role }: { token: string; role: UserRole }) {
     },
   })
 
-  const { data: chartData = [] } = useQuery({
+  const { data: chartData = [], isPending: chartPending, isError: chartError } = useQuery({
     queryKey: ['chart', token],
     queryFn: async () => {
       const response = await axios.get(`${API_BASE}/dashboard/sales-chart`, { headers: getHeaders(token) })
@@ -275,7 +325,23 @@ function DashboardPage({ token, role }: { token: string; role: UserRole }) {
     },
   })
 
-  const { data: exchangeRate } = useQuery({
+  const { data: products = [], isPending: productsPending, isError: productsError } = useQuery({
+    queryKey: ['products', token],
+    queryFn: async () => {
+      const response = await axios.get(`${API_BASE}/products`, { headers: getHeaders(token) })
+      return response.data as Product[]
+    },
+  })
+
+  const { data: orders = [], isPending: ordersPending, isError: ordersError } = useQuery({
+    queryKey: ['sales-orders', token],
+    queryFn: async () => {
+      const response = await axios.get(`${API_BASE}/sales-orders`, { headers: getHeaders(token) })
+      return response.data as SalesOrder[]
+    },
+  })
+
+  const { data: exchangeRate, isError: exchangeRateError } = useQuery({
     queryKey: ['exchange-rate', 'USD'],
     queryFn: async () => {
       const response = await axios.get(`${API_BASE}/external/exchange-rate?to=USD`)
@@ -283,51 +349,56 @@ function DashboardPage({ token, role }: { token: string; role: UserRole }) {
     },
     staleTime: 60 * 60 * 1000,
   })
-
+  const lowStockProducts = products.filter((product) => product.stock <= product.min_stock).slice(0, 5)
+  const latestOrders = [...orders].sort((first, second) => new Date(second.created_at).getTime() - new Date(first.created_at).getTime()).slice(0, 6)
   return (
-    <div>
-      <header className="page-header">
-        <div>
-          <div className="eyebrow">Overview</div>
-          <h2>Dashboard</h2>
+    <div className="dashboard-page">
+      <header className="page-header dashboard-heading">
+        <div><div className="eyebrow">RUANG OPERASIONAL</div><h2>Dashboard</h2><p className="date-context">{dashboardDateLabel}</p></div>
+        <div className="dashboard-actions">
+          {(role === 'admin' || role === 'sales') && <Link className="primary-action" to="/sales"><CircleDollarSign size={16} />Buat penjualan</Link>}
+          {(role === 'admin' || role === 'gudang') && <Link className="secondary-action" to="/products"><Boxes size={16} />Kelola produk</Link>}
+          <div className="exchange-rate"><span>KURS REFERENSI · 1 IDR</span><strong>{exchangeRateError ? 'Tidak tersedia' : exchangeRate ? `${Number(exchangeRate.rates.USD).toLocaleString('id-ID', { maximumSignificantDigits: 4 })} USD` : 'Memuat...'}</strong><small>{exchangeRate?.date ?? (exchangeRateError ? 'Periksa koneksi' : 'Kurs terbaru')}</small></div>
         </div>
       </header>
-
       <div className="stats-grid">
-        <StatCard title="Omzet" value={currency.format(summary?.total_revenue ?? 0)} tone="green" />
-        <StatCard title="Jumlah Order" value={String(summary?.total_orders ?? 0)} tone="blue" />
-        <StatCard title="Invoice belum dibayar" value={String(summary?.unpaid_invoices ?? 0)} tone="amber" />
-        <StatCard title="Stok menipis" value={String(summary?.low_stock_products ?? 0)} tone="red" />
+        <StatCard title="Total omzet" value={summaryError ? 'Gagal dimuat' : summaryPending ? 'Memuat...' : currency.format(summary?.total_revenue ?? 0)} tone="green" icon={<CircleDollarSign size={18} />} />
+        <StatCard title="Sales order" value={summaryError ? 'Gagal dimuat' : summaryPending ? 'Memuat...' : String(summary?.total_orders ?? 0)} tone="blue" icon={<ShoppingCart size={18} />} />
+        <StatCard title="Invoice belum dibayar" value={summaryError ? 'Gagal dimuat' : summaryPending ? 'Memuat...' : String(summary?.unpaid_invoices ?? 0)} tone="amber" icon={<ArrowDownRight size={18} />} />
+        <StatCard title="Produk stok menipis" value={summaryError ? 'Gagal dimuat' : summaryPending ? 'Memuat...' : String(summary?.low_stock_products ?? 0)} tone="red" icon={<AlertTriangle size={18} />} />
       </div>
 
-      <section className="quick-actions" aria-label="Master data">
-        {(role === 'admin' || role === 'gudang') && <Link to="/products"><span>Inventory</span><strong>Kelola produk</strong></Link>}
-        {(role === 'admin' || role === 'sales') && <Link to="/customers"><span>Sales</span><strong>Kelola customer</strong></Link>}
-        {(role === 'admin' || role === 'gudang') && <Link to="/suppliers"><span>Purchasing</span><strong>Kelola supplier</strong></Link>}
-      </section>
-
-      <div className="rate-strip">Kurs referensi: 1 IDR = {exchangeRate?.rates.USD ?? '...'} USD <span>{exchangeRate?.date ?? ''}</span></div>
-
-      <div className="panel chart-panel">
-        <h3>Penjualan 7 hari</h3>
-        <div style={{ width: '100%', height: 280 }}>
-          <ResponsiveContainer>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="fillSales" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} />
-              <Tooltip formatter={(value) => currency.format(Number(Array.isArray(value) ? value[0] : value ?? 0))} />
-              <Area type="monotone" dataKey="total" stroke="#2563eb" fill="url(#fillSales)" strokeWidth={2} />
+      <div className="dashboard-grid">
+        <section className="panel chart-panel">
+          <div className="panel-heading"><div><div className="eyebrow">TREN PENJUALAN</div><h3>Performa 7 hari</h3></div><span className="panel-period"><Activity size={15} />7 hari terakhir</span></div>
+          {chartPending ? <div className="dashboard-state">Memuat data penjualan...</div> : chartError ? <div className="dashboard-state error-text">Data grafik tidak dapat dimuat.</div> : chartData.length ? <div className="chart-wrap"><ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+              <defs><linearGradient id="fillSales" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#27966f" stopOpacity={0.24} /><stop offset="100%" stopColor="#27966f" stopOpacity={0.01} /></linearGradient></defs>
+              <CartesianGrid vertical={false} stroke="#e7ece9" />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#87928d', fontSize: 11 }} tickFormatter={(value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'short' })} />
+              <YAxis tickLine={false} axisLine={false} width={58} tick={{ fill: '#87928d', fontSize: 10 }} tickFormatter={(value: number) => value >= 1000000 ? `${(value / 1000000).toFixed(0)} jt` : value >= 1000 ? `${(value / 1000).toFixed(0)} rb` : String(value)} />
+              <Tooltip formatter={(value) => currency.format(Number(Array.isArray(value) ? value[0] : value ?? 0))} labelFormatter={(value) => new Date(`${value}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })} />
+              <Area type="monotone" dataKey="total" name="Penjualan" stroke="#20845f" fill="url(#fillSales)" strokeWidth={2.5} activeDot={{ r: 4, fill: '#20845f', stroke: '#fff', strokeWidth: 2 }} />
             </AreaChart>
-          </ResponsiveContainer>
-        </div>
+          </ResponsiveContainer></div> : <div className="dashboard-state">Belum ada transaksi penjualan dalam periode ini.</div>}
+        </section>
+
+        <section className="panel attention-panel">
+          <div className="panel-heading"><div><div className="eyebrow">PERLU PERHATIAN</div><h3>Stok menipis</h3></div><span className="attention-icon"><AlertTriangle size={17} /></span></div>
+          {productsPending ? <div className="dashboard-state compact-state">Memuat stok...</div> : productsError ? <div className="dashboard-state compact-state error-text">Daftar produk tidak dapat dimuat.</div> : lowStockProducts.length ? <div className="stock-list">{lowStockProducts.map((product) => <div className="stock-row" key={product.id}><span className="stock-indicator" /><span className="stock-copy"><strong>{product.name}</strong><small>{product.sku} · Min. {product.min_stock}</small></span><b className="stock-qty">{product.stock}<small> unit</small></b></div>)}</div> : <div className="dashboard-state compact-state">Semua stok berada di atas batas minimum.</div>}
+          {(role === 'admin' || role === 'gudang') && <Link className="panel-link" to="/products">Lihat inventaris <ArrowUpRight size={14} /></Link>}
+        </section>
       </div>
+
+      <section className="panel table-panel latest-orders">
+        <div className="panel-heading"><div><div className="eyebrow">AKTIVITAS TERBARU</div><h3>Sales order terbaru</h3></div>{(role === 'admin' || role === 'sales') && <Link className="panel-link" to="/sales">Semua penjualan <ArrowUpRight size={14} /></Link>}</div>
+        <div className="table-scroll"><table><thead><tr><th>Nomor order</th><th>Tanggal</th><th>Pelanggan</th><th>Total</th><th>Status pembayaran</th></tr></thead><tbody>
+          {ordersPending && <tr><td colSpan={5} className="empty-state">Memuat sales order...</td></tr>}
+          {ordersError && <tr><td colSpan={5} className="empty-state error-text">Daftar sales order tidak dapat dimuat.</td></tr>}
+          {latestOrders.map((order) => <tr key={order.id}><td><strong>SO-{String(order.id).padStart(6, '0')}</strong></td><td>{new Date(order.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</td><td>{order.customer?.name ?? '—'}</td><td>{currency.format(order.total)}</td><td><span className={`status-badge ${order.invoice?.status ?? order.status}`}>{order.invoice?.status ?? order.status}</span></td></tr>)}
+          {!ordersPending && !ordersError && !latestOrders.length && <tr><td colSpan={5} className="empty-state">Belum ada sales order.</td></tr>}
+        </tbody></table></div>
+      </section>
     </div>
   )
 }
@@ -870,10 +941,10 @@ function PurchasesPage({ token }: { token: string }) {
   )
 }
 
-function StatCard({ title, value, tone }: { title: string; value: string; tone: 'green' | 'blue' | 'amber' | 'red' }) {
+function StatCard({ title, value, tone, icon }: { title: string; value: string; tone: 'green' | 'blue' | 'amber' | 'red'; icon: React.ReactNode }) {
   return (
     <div className={`stat-card ${tone}`}>
-      <div className="stat-title">{title}</div>
+      <div className="stat-topline"><div className="stat-title">{title}</div><span className="stat-icon">{icon}</span></div>
       <div className="stat-value">{value}</div>
     </div>
   )
