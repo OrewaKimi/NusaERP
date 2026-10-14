@@ -76,6 +76,19 @@ class MidtransService
         return $serverEnvironment;
     }
 
+    public function transactionStatus(string $orderId): array
+    {
+        $environment = $this->assertConfiguration();
+        $apiHost = $environment === 'sandbox' ? 'api.sandbox.midtrans.com' : 'api.midtrans.com';
+
+        return Http::acceptJson()
+            ->withBasicAuth(config('services.midtrans.server_key'), '')
+            ->timeout(15)
+            ->get('https://'.$apiHost.'/v2/'.rawurlencode($orderId).'/status')
+            ->throw()
+            ->json();
+    }
+
     private function keyEnvironment(string $key, string $type): ?string
     {
         $prefix = $type === 'server' ? 'Mid-server-' : 'Mid-client-';

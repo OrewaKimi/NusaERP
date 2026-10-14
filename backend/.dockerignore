@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+bootstrap/cache/config.php
+vendor
+node_modules

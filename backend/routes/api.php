@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/sales-orders', [ApiSalesController::class, 'index']);
     Route::get('/sales-orders/{salesOrder}', [ApiSalesController::class, 'show']);
+    Route::get('/payments/midtrans/{orderId}/status', [ApiSalesController::class, 'syncMidtransStatus']);
     Route::middleware('role:admin,sales')->group(function () {
         Route::post('/sales-orders', [ApiSalesController::class, 'store']);
         Route::post('/sales-orders/{salesOrder}/invoice', [ApiSalesController::class, 'createInvoice']);

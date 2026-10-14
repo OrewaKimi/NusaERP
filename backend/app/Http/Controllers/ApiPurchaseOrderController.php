@@ -2,14 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
 use App\Models\PurchaseOrder;
-use App\Models\PurchaseOrderItem;
-use App\Services\AutomationWebhookService;
 use App\Services\AutomationService;
+use App\Services\AutomationWebhookService;
 use App\Services\StockService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ApiPurchaseOrderController extends Controller
 {

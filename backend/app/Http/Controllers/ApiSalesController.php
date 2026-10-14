@@ -159,7 +159,67 @@ class ApiSalesController extends Controller
             ], 503);
         }
 
-        $payload = $request->all();
+        return $this->processMidtransPayload($request->all(), $automationWebhook);
+    }
+
+    public function syncMidtransStatus(string $orderId, AutomationWebhookService $automationWebhook, MidtransService $midtrans)
+    {
+        try {
+            $midtrans->assertConfiguration();
+            $payment = Payment::where('order_id', $orderId)->first();
+
+            if (! $payment) {
+                return response()->json(['message' => 'Pembayaran tidak ditemukan.'], 404);
+            }
+
+            if ($payment->invoice->status === 'paid') {
+                return response()->json([
+                    'status' => 'paid',
+                    'invoice' => $payment->invoice,
+                ]);
+            }
+
+            $gatewayStatus = $midtrans->transactionStatus($orderId);
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => 'Konfigurasi Midtrans belum valid. Pastikan server key, client key, dan Snap URL memakai environment yang sama.',
+            ], 503);
+        } catch (RequestException $exception) {
+            $status = $exception->response->status();
+
+            return response()->json([
+                'message' => $status === 404
+                    ? 'Transaksi belum ditemukan di Midtrans.'
+                    : 'Midtrans gagal memeriksa status transaksi.',
+            ], $status === 404 ? 404 : 502);
+        } catch (ConnectionException $exception) {
+            return response()->json(['message' => 'Midtrans tidak dapat dijangkau.'], 502);
+        }
+
+        if (($gatewayStatus['order_id'] ?? null) !== $orderId
+            || empty($gatewayStatus['status_code'])
+            || empty($gatewayStatus['gross_amount'])
+            || empty($gatewayStatus['transaction_status'])) {
+            return response()->json(['message' => 'Respons status transaksi dari Midtrans tidak lengkap.'], 502);
+        }
+
+        $payload = [
+            'order_id' => $orderId,
+            'status_code' => (string) $gatewayStatus['status_code'],
+            'gross_amount' => (string) $gatewayStatus['gross_amount'],
+            'transaction_status' => $gatewayStatus['transaction_status'],
+            'fraud_status' => $gatewayStatus['fraud_status'] ?? null,
+        ];
+        $payload['signature_key'] = hash(
+            'sha512',
+            $payload['order_id'].$payload['status_code'].$payload['gross_amount'].config('services.midtrans.server_key')
+        );
+
+        return $this->processMidtransPayload($payload, $automationWebhook);
+    }
+
+    private function processMidtransPayload(array $payload, AutomationWebhookService $automationWebhook)
+    {
         $orderId = $payload['order_id'] ?? null;
         $serverKey = config('services.midtrans.server_key');
         $signature = $payload['signature_key'] ?? '';

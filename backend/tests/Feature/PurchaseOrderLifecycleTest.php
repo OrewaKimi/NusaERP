@@ -60,6 +60,22 @@ class PurchaseOrderLifecycleTest extends TestCase
         ])->assertOk()->assertJsonPath('purchase_order.status', 'approved');
     }
 
+    public function test_admin_can_approve_a_submitted_purchase_order_through_erp_api(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchaseOrder = $this->createPurchaseOrder('submitted');
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/purchase-orders/'.$purchaseOrder->id.'/approve')
+            ->assertOk()
+            ->assertJsonPath('purchase_order.status', 'approved');
+
+        $this->assertDatabaseHas('purchase_orders', [
+            'id' => $purchaseOrder->id,
+            'status' => 'approved',
+        ]);
+    }
+
     public function test_submitting_a_purchase_order_dispatches_the_n8n_event(): void
     {
         config([

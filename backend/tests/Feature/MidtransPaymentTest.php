@@ -234,6 +234,75 @@ class MidtransPaymentTest extends TestCase
             ->assertJsonPath('message', 'Midtrans menolak pembuatan transaksi dengan HTTP 500. Periksa status gateway dan coba lagi.');
     }
 
+    public function test_authenticated_status_sync_settles_invoice_when_notification_was_missed(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+            'services.n8n.token' => 'test-automation-token',
+            'services.n8n.webhooks.payment_success' => 'http://n8n.test/webhook/payment-success',
+        ]);
+        Http::fake([
+            'https://api.sandbox.midtrans.com/v2/NUSA-STATUS-SETTLED/status' => Http::response([
+                'order_id' => 'NUSA-STATUS-SETTLED',
+                'status_code' => '200',
+                'gross_amount' => '1000.00',
+                'transaction_status' => 'settlement',
+            ]),
+            'http://n8n.test/*' => Http::response(['accepted' => true], 200),
+        ]);
+        [$user, $invoice] = $this->createInvoice();
+        Payment::create([
+            'invoice_id' => $invoice->id,
+            'gateway' => 'midtrans',
+            'order_id' => 'NUSA-STATUS-SETTLED',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/payments/midtrans/NUSA-STATUS-SETTLED/status')
+            ->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('invoice.status', 'paid');
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.sandbox.midtrans.com/v2/NUSA-STATUS-SETTLED/status'
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('SB-Mid-server-test-key:'))
+        );
+        $this->assertDatabaseHas('sales_orders', ['id' => $invoice->sales_order_id, 'status' => 'paid']);
+        $this->assertDatabaseHas('products', ['id' => $invoice->salesOrder->items->first()->product_id, 'stock' => 3]);
+    }
+
+    public function test_status_sync_does_not_trust_status_for_a_different_order_id(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
+        Http::fake([
+            'https://api.sandbox.midtrans.com/v2/NUSA-STATUS-EXPECTED/status' => Http::response([
+                'order_id' => 'NUSA-STATUS-OTHER',
+                'status_code' => '200',
+                'gross_amount' => '1000.00',
+                'transaction_status' => 'settlement',
+            ]),
+        ]);
+        [$user, $invoice] = $this->createInvoice();
+        Payment::create([
+            'invoice_id' => $invoice->id,
+            'gateway' => 'midtrans',
+            'order_id' => 'NUSA-STATUS-EXPECTED',
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/payments/midtrans/NUSA-STATUS-EXPECTED/status')
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'Respons status transaksi dari Midtrans tidak lengkap.');
+
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'unpaid']);
+        $this->assertDatabaseHas('products', ['id' => $invoice->salesOrder->items->first()->product_id, 'stock' => 5]);
+    }
+
     private function createInvoice(): array
     {
         $user = User::factory()->create(['role' => 'admin']);

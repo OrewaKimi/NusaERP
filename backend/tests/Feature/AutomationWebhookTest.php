@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AutomationLog;
+use App\Models\Product;
 use App\Services\AutomationWebhookService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -47,5 +48,36 @@ class AutomationWebhookTest extends TestCase
             'event' => 'po_submitted',
             'status' => 'failed',
         ]);
+    }
+
+    public function test_low_stock_endpoint_returns_items_that_trigger_alert_branch(): void
+    {
+        config(['services.n8n.token' => 'test-token']);
+
+        Product::create([
+            'sku' => 'LOW-001',
+            'name' => 'Low stock item',
+            'stock' => 2,
+            'min_stock' => 5,
+        ]);
+        Product::create([
+            'sku' => 'OK-001',
+            'name' => 'Healthy stock item',
+            'stock' => 8,
+            'min_stock' => 5,
+        ]);
+
+        $this->getJson('/api/automation/low-stock', [
+            'X-Automation-Token' => 'test-token',
+        ])
+            ->assertOk()
+            ->assertExactJson([
+                'count' => 1,
+                'items' => [[
+                    'sku' => 'LOW-001',
+                    'stock' => 2,
+                    'min_stock' => 5,
+                ]],
+            ]);
     }
 }
