@@ -14,6 +14,12 @@ class Invoice extends Model
         'amount',
         'status',
         'due_date',
+        'paid_at',
+    ];
+
+    protected $casts = [
+        'due_date' => 'date',
+        'paid_at' => 'datetime',
     ];
 
     public function salesOrder(): BelongsTo

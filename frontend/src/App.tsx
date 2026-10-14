@@ -635,8 +635,8 @@ function SalesPage({ token }: { token: string }) {
   const [error, setError] = useState('')
   const [result, setResult] = useState<string>(() => {
     const paymentState = new URLSearchParams(window.location.search).get('payment')
-    if (paymentState === 'finish') return 'Checkout selesai. Status pembayaran final menunggu konfirmasi Midtrans.'
-    if (paymentState === 'pending') return 'Pembayaran masih menunggu penyelesaian di Midtrans.'
+    if (paymentState === 'finish') return 'Kembali dari checkout. Status terbaru tersedia pada daftar Sales Order dan Invoice.'
+    if (paymentState === 'pending') return 'Pembayaran menunggu penyelesaian. Periksa status terbaru pada daftar invoice.'
     if (paymentState === 'error') return 'Pembayaran belum berhasil. Anda dapat mencoba checkout kembali.'
     return ''
   })

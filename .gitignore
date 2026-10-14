@@ -9,4 +9,5 @@ frontend/dist/
 backend/vendor/
 backend/storage/logs/*.log
 backend/bootstrap/cache/*.php
+n8n/data/
 .DS_Store

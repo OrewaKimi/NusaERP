@@ -88,6 +88,8 @@ Isi `MIDTRANS_SERVER_KEY` dan `MIDTRANS_CLIENT_KEY` pada environment backend (Co
 
 Untuk callback, set Notification URL dashboard Midtrans ke `https://<public-host>/api/payments/midtrans/notification`, lalu arahkan tunnel HTTPS ke backend port 8000. Callback settlement harus melewati signature dan amount validation sebelum invoice paid dan stok berkurang. Return URL checkout kembali ke halaman Sales; redirect kembali bukan bukti pembayaran.
 
+Panduan langkah demi langkah Cloudflare Quick Tunnel dan Named Tunnel, konfigurasi URL notifikasi Sandbox, uji koneksi, troubleshooting, dan keamanan tersedia di [docs/cloudflare-tunnel-midtrans.md](docs/cloudflare-tunnel-midtrans.md).
+
 ## Workflow n8n
 
 - `wf1-payment-success.json`: menerima event settlement Laravel, memvalidasi shared token, mencatat event pada execution n8n, lalu memberi acknowledgment.
@@ -95,6 +97,8 @@ Untuk callback, set Notification URL dashboard Midtrans ke `https://<public-host
 - `wf3-po-approval.json`: menerima event PO submitted dengan shared token dan menyusun informasi permintaan approval. Approval tetap dilakukan user berwenang melalui endpoint ERP.
 
 Email, Telegram, dan Google Sheets belum dikonfigurasi. Tambahkan node dan credentials kanal tersebut sebelum menganggap notifikasi eksternal aktif. Workflow diekspor dalam repository, tetapi perlu diimpor/diaktifkan di instance n8n.
+
+Untuk menjalankan image n8n secara mandiri lewat Docker Desktop dan mengimpor workflow, ikuti [docs/n8n-docker-desktop.md](docs/n8n-docker-desktop.md).
 
 ## Endpoint Utama
 

@@ -6,15 +6,14 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\SalesOrder;
-use App\Models\SalesOrderItem;
-use App\Services\MidtransService;
 use App\Services\AutomationWebhookService;
+use App\Services\MidtransService;
 use App\Services\StockService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ApiSalesController extends Controller
@@ -111,11 +110,21 @@ class ApiSalesController extends Controller
             $snapResponse = $midtrans->createTransaction($invoice, $orderId);
         } catch (\InvalidArgumentException $exception) {
             return response()->json([
-                'message' => 'Midtrans Sandbox belum dikonfigurasi pada backend.',
+                'message' => 'Midtrans belum siap. Pastikan server key, client key, dan Snap URL memakai environment yang sama.',
             ], 503);
-        } catch (ConnectionException|RequestException $exception) {
+        } catch (RequestException $exception) {
+            if (in_array($exception->response->status(), [401, 403], true)) {
+                return response()->json([
+                    'message' => 'Midtrans menolak kredensial. Periksa pasangan key dan environment di dashboard Midtrans.',
+                ], 502);
+            }
+
             return response()->json([
-                'message' => 'Midtrans Sandbox gagal membuat transaksi. Periksa konfigurasi dan coba lagi.',
+                'message' => 'Midtrans menolak pembuatan transaksi dengan HTTP '.$exception->response->status().'. Periksa status gateway dan coba lagi.',
+            ], 502);
+        } catch (ConnectionException $exception) {
+            return response()->json([
+                'message' => 'Midtrans tidak dapat dijangkau. Periksa koneksi dan coba lagi.',
             ], 502);
         }
 
@@ -140,8 +149,16 @@ class ApiSalesController extends Controller
         ]);
     }
 
-    public function midtransNotification(Request $request, AutomationWebhookService $automationWebhook)
+    public function midtransNotification(Request $request, AutomationWebhookService $automationWebhook, MidtransService $midtrans)
     {
+        try {
+            $midtrans->assertConfiguration();
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => 'Konfigurasi Midtrans belum valid. Pastikan server key, client key, dan Snap URL memakai environment yang sama.',
+            ], 503);
+        }
+
         $payload = $request->all();
         $orderId = $payload['order_id'] ?? null;
         $serverKey = config('services.midtrans.server_key');

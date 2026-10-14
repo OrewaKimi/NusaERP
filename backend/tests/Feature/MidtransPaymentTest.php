@@ -19,7 +19,10 @@ class MidtransPaymentTest extends TestCase
 
     public function test_payment_endpoint_creates_a_sandbox_snap_transaction(): void
     {
-        config(['services.midtrans.server_key' => 'sandbox-server-key']);
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
         Http::fake([
             'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response([
                 'token' => 'snap-token-demo',
@@ -36,11 +39,10 @@ class MidtransPaymentTest extends TestCase
             ->assertJsonPath('snap_token', 'snap-token-demo')
             ->assertJsonPath('snap_url', 'https://app.sandbox.midtrans.com/snap/v2/vtweb/demo');
 
-        Http::assertSent(fn ($request) =>
-            $request->url() === 'https://app.sandbox.midtrans.com/snap/v1/transactions'
+        Http::assertSent(fn ($request) => $request->url() === 'https://app.sandbox.midtrans.com/snap/v1/transactions'
             && $request['transaction_details']['gross_amount'] === 1000
             && $request['callbacks']['finish'] === 'http://localhost:5173/sales?payment=finish'
-            && $request->hasHeader('Authorization', 'Basic '.base64_encode('sandbox-server-key:'))
+            && $request->hasHeader('Authorization', 'Basic '.base64_encode('SB-Mid-server-test-key:'))
         );
 
         $this->assertDatabaseHas('payments', [
@@ -52,7 +54,10 @@ class MidtransPaymentTest extends TestCase
 
     public function test_midtrans_notification_requires_a_valid_signature(): void
     {
-        config(['services.midtrans.server_key' => 'sandbox-server-key']);
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
         [$user, $invoice] = $this->createInvoice();
         $payment = Payment::create([
             'invoice_id' => $invoice->id,
@@ -79,7 +84,8 @@ class MidtransPaymentTest extends TestCase
     public function test_signed_settlement_marks_invoice_paid_and_deducts_stock_once(): void
     {
         config([
-            'services.midtrans.server_key' => 'sandbox-server-key',
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
             'services.n8n.token' => 'test-automation-token',
             'services.n8n.webhooks.payment_success' => 'http://n8n.test/webhook/payment-success',
         ]);
@@ -98,24 +104,27 @@ class MidtransPaymentTest extends TestCase
             'gross_amount' => '1000.00',
             'transaction_status' => 'settlement',
         ];
-        $payload['signature_key'] = hash('sha512', $payload['order_id'].$payload['status_code'].$payload['gross_amount'].'sandbox-server-key');
+        $payload['signature_key'] = hash('sha512', $payload['order_id'].$payload['status_code'].$payload['gross_amount'].'SB-Mid-server-test-key');
 
         $this->postJson('/api/payments/midtrans/notification', $payload)->assertOk()->assertJsonPath('status', 'ok');
         $this->postJson('/api/payments/midtrans/notification', $payload)->assertOk()->assertJsonPath('status', 'duplicate');
 
-        Http::assertSent(fn ($request) =>
-            $request->url() === 'http://n8n.test/webhook/payment-success'
+        Http::assertSent(fn ($request) => $request->url() === 'http://n8n.test/webhook/payment-success'
             && $request['order_id'] === $payment->order_id
             && $request->hasHeader('X-Automation-Token', 'test-automation-token')
         );
 
         $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'paid']);
+        $this->assertNotNull($invoice->fresh()->paid_at);
         $this->assertDatabaseHas('products', ['id' => $invoice->salesOrder->items->first()->product_id, 'stock' => 3]);
     }
 
     public function test_signed_expiry_notification_marks_invoice_expired_without_changing_stock(): void
     {
-        config(['services.midtrans.server_key' => 'sandbox-server-key']);
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
         [, $invoice] = $this->createInvoice();
         $payment = Payment::create([
             'invoice_id' => $invoice->id,
@@ -129,7 +138,7 @@ class MidtransPaymentTest extends TestCase
             'gross_amount' => '1000.00',
             'transaction_status' => 'expire',
         ];
-        $payload['signature_key'] = hash('sha512', $payload['order_id'].$payload['status_code'].$payload['gross_amount'].'sandbox-server-key');
+        $payload['signature_key'] = hash('sha512', $payload['order_id'].$payload['status_code'].$payload['gross_amount'].'SB-Mid-server-test-key');
 
         $this->postJson('/api/payments/midtrans/notification', $payload)
             ->assertOk()
@@ -137,6 +146,92 @@ class MidtransPaymentTest extends TestCase
 
         $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'expired']);
         $this->assertDatabaseHas('products', ['id' => $invoice->salesOrder->items->first()->product_id, 'stock' => 5]);
+    }
+
+    public function test_payment_endpoint_rejects_production_key_with_sandbox_snap_url(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'Mid-server-test-key',
+            'services.midtrans.client_key' => 'Mid-client-test-key',
+            'services.midtrans.snap_url' => 'https://app.sandbox.midtrans.com/snap/v1/transactions',
+        ]);
+        Http::fake();
+        [$user, $invoice] = $this->createInvoice();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/invoices/'.$invoice->id.'/pay')
+            ->assertServiceUnavailable()
+            ->assertJsonPath('message', 'Midtrans belum siap. Pastikan server key, client key, dan Snap URL memakai environment yang sama.');
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+    }
+
+    public function test_payment_endpoint_rejects_client_key_from_another_environment(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'Mid-client-test-key',
+        ]);
+        Http::fake();
+        [$user, $invoice] = $this->createInvoice();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/invoices/'.$invoice->id.'/pay')
+            ->assertServiceUnavailable();
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('payments', ['invoice_id' => $invoice->id]);
+    }
+
+    public function test_notification_rejects_mismatched_environment_before_signature_validation(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'Mid-server-test-key',
+            'services.midtrans.client_key' => 'Mid-client-test-key',
+        ]);
+
+        $this->postJson('/api/payments/midtrans/notification', [
+            'order_id' => 'NUSA-MISMATCH',
+            'status_code' => '200',
+            'gross_amount' => '1000.00',
+            'signature_key' => 'not-used',
+        ])->assertServiceUnavailable()
+            ->assertJsonPath('message', 'Konfigurasi Midtrans belum valid. Pastikan server key, client key, dan Snap URL memakai environment yang sama.');
+    }
+
+    public function test_payment_endpoint_reports_gateway_authentication_failure(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
+        Http::fake([
+            'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+        [$user, $invoice] = $this->createInvoice();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/invoices/'.$invoice->id.'/pay')
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'Midtrans menolak kredensial. Periksa pasangan key dan environment di dashboard Midtrans.');
+    }
+
+    public function test_payment_endpoint_reports_midtrans_server_error_status(): void
+    {
+        config([
+            'services.midtrans.server_key' => 'SB-Mid-server-test-key',
+            'services.midtrans.client_key' => 'SB-Mid-client-test-key',
+        ]);
+        Http::fake([
+            'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response(['message' => 'internal error'], 500),
+        ]);
+        [$user, $invoice] = $this->createInvoice();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/invoices/'.$invoice->id.'/pay')
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'Midtrans menolak pembuatan transaksi dengan HTTP 500. Periksa status gateway dan coba lagi.');
     }
 
     private function createInvoice(): array
