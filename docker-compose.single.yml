@@ -1,0 +1,46 @@
+services:
+  nusaerp:
+    build:
+      context: .
+      dockerfile: Dockerfile.single
+    image: nusaerp-all-in-one:latest
+    restart: unless-stopped
+    environment:
+      APP_KEY: ${APP_KEY:-}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-nusaerp}
+      DB_USERNAME: ${DB_USERNAME:-nusaerp}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-this-password}
+      POSTGRES_DB: ${POSTGRES_DB:-nusaerp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-password}
+      AUTOMATION_TOKEN: ${AUTOMATION_TOKEN:-change-this-automation-token}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-}
+      N8N_PUBLIC_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      N8N_WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_URL:-http://localhost:5678/}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_PROXY_HOPS: '1'
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: 'false'
+      CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
+      MIDTRANS_SNAP_URL: ${MIDTRANS_SNAP_URL:-https://app.sandbox.midtrans.com/snap/v1/transactions}
+    ports:
+      - '127.0.0.1:${APP_PORT:-8080}:8080'
+      - '127.0.0.1:${N8N_HOST_PORT:-5678}:5678'
+    volumes:
+      - nusaerp_all_data:/var/lib/nusaerp
+    healthcheck:
+      test: ['CMD-SHELL', 'curl --fail --silent http://127.0.0.1:8080/up >/dev/null && curl --fail --silent http://127.0.0.1:5678/healthz >/dev/null']
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+
+volumes:
+  nusaerp_all_data:

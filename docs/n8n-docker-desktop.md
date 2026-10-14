@@ -25,6 +25,7 @@ Environment variables yang perlu ditambahkan satu per satu memakai tombol `+`:
 | `N8N_BASIC_AUTH_ACTIVE` | `false` |
 | `N8N_BLOCK_ENV_ACCESS_IN_NODE` | `false` |
 | `NUSAERP_AUTOMATION_TOKEN` | Harus sama persis dengan `AUTOMATION_TOKEN` pada `backend/.env` (setup demo lokal saat ini: `nusaerp-secret`) |
+| `NUSAERP_BACKEND_URL` | `http://host.docker.internal:8000` saat n8n standalone dan backend berjalan di Mac |
 | `FRONTEND_URL` | `http://localhost:5173` |
 | `N8N_SECURE_COOKIE` | `false` (hanya untuk editor lokal melalui HTTP) |
 
@@ -68,13 +69,13 @@ Periksa dari Mac:
 curl -i http://127.0.0.1:8000/up
 ```
 
-Harus HTTP `200`. `--host=0.0.0.0` membuat Laravel listen pada interface yang dapat diteruskan Docker Desktop. Workflow WF2 sudah memakai:
+Harus HTTP `200`. `--host=0.0.0.0` membuat Laravel listen pada interface yang dapat diteruskan Docker Desktop. WF2 membaca alamat backend dari `NUSAERP_BACKEND_URL`:
 
 ```text
-http://host.docker.internal:8000/api/automation/low-stock
+NUSAERP_BACKEND_URL=http://host.docker.internal:8000
 ```
 
-Itu khusus akses dari container macOS menuju host. Untuk Docker Compose, gunakan hostname service `backend` pada workflow/config Compose.
+Itu khusus akses dari container macOS menuju host. Docker Compose mengatur nilainya ke `http://backend:8000` agar workflow memakai hostname service internal.
 
 ## 4. Periksa konfigurasi backend
 

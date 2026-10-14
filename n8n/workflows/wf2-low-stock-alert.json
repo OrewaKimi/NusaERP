@@ -11,7 +11,7 @@
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:8000/api/automation/low-stock",
+        "url": "={{$env.NUSAERP_BACKEND_URL + '/api/automation/low-stock'}}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "X-Automation-Token", "value": "={{$env.NUSAERP_AUTOMATION_TOKEN}}" }] },
         "options": { "response": { "response": { "neverError": false } } }

@@ -633,13 +633,43 @@ function SalesPage({ token }: { token: string }) {
   const [items, setItems] = useState([{ product_id: '', qty: 1 }])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const returnParams = new URLSearchParams(window.location.search)
+  const returnPayment = returnParams.get('payment')
+  const returnOrderId = returnParams.get('order_id')
   const [result, setResult] = useState<string>(() => {
-    const paymentState = new URLSearchParams(window.location.search).get('payment')
-    if (paymentState === 'finish') return 'Kembali dari checkout. Status terbaru tersedia pada daftar Sales Order dan Invoice.'
-    if (paymentState === 'pending') return 'Pembayaran menunggu penyelesaian. Periksa status terbaru pada daftar invoice.'
-    if (paymentState === 'error') return 'Pembayaran belum berhasil. Anda dapat mencoba checkout kembali.'
+    if (returnPayment === 'finish') return 'Memverifikasi status pembayaran ke Midtrans...'
+    if (returnPayment === 'pending') return 'Pembayaran menunggu penyelesaian. Status akan diperbarui saat kembali dari Midtrans.'
+    if (returnPayment === 'error') return 'Pembayaran belum berhasil. Anda dapat mencoba checkout kembali.'
     return ''
   })
+
+  useEffect(() => {
+    if (returnPayment !== 'finish' || !returnOrderId) return
+
+    let active = true
+    axios.get(`${API_BASE}/payments/midtrans/${encodeURIComponent(returnOrderId)}/status`, { headers: getHeaders(token) })
+      .then(async (response) => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['sales-orders', token] }),
+          queryClient.invalidateQueries({ queryKey: ['summary', token] }),
+          queryClient.invalidateQueries({ queryKey: ['chart', token] }),
+          queryClient.invalidateQueries({ queryKey: ['products', token] }),
+        ])
+
+        if (active) {
+          setResult(response.data.status === 'ok' || response.data.status === 'paid'
+            ? 'Pembayaran terverifikasi oleh Midtrans. Status order dan dashboard telah diperbarui.'
+            : `Status pembayaran Midtrans: ${response.data.status ?? 'menunggu'}.`)
+        }
+      })
+      .catch((syncError: unknown) => {
+        if (active) setError(getErrorMessage(syncError))
+      })
+
+    return () => {
+      active = false
+    }
+  }, [queryClient, returnOrderId, returnPayment, token])
 
   const total = items.reduce((sum, item) => {
     const product = products.find((entry) => String(entry.id) === String(item.product_id))

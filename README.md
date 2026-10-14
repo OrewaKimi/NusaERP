@@ -13,8 +13,8 @@ Mini ERP untuk penjualan, persediaan, dan purchasing. Backend Laravel menyediaka
 | Inventory | Terintegrasi | CRUD produk, movement history, adjustment masuk/keluar yang diaudit dengan proteksi stok negatif. Belum mendukung multi-gudang. |
 | Purchasing | Terintegrasi sebagian | Buat/submit, daftar status, approve, receive; transisi status tervalidasi dan stok masuk idempoten. Belum ada edit/hapus draft atau PDF. |
 | Dashboard | Terintegrasi sebagian | KPI, chart tujuh hari kalender dengan nilai nol, dan kurs IDR/USD dari Frankfurter. |
-| n8n | Terintegrasi sebagian | Laravel mengirim event pembayaran/PO; low-stock workflow polling tiap 5 menit. Workflow belum menjalankan kanal email/Telegram/Sheets dan belum diverifikasi di runtime n8n. |
-| Docker Compose | Belum diverifikasi | Definisi service tersedia, tetapi Compose belum dijalankan karena Docker daemon tidak tersedia saat pengembangan. |
+| n8n | Terintegrasi sebagian | Laravel mengirim event pembayaran/PO; low-stock workflow polling tiap 5 menit dan menyiapkan ringkasan. WF3 memberi link ke Purchasing; admin tetap menyetujui dari UI ERP. Belum ada kanal pesan email/Telegram/Sheets. |
+| Docker Compose | Runtime terverifikasi | Stack berjalan dari image build dengan named volumes baru; backend memakai konfigurasi PostgreSQL service dan endpoint low-stock dapat diakses dari n8n. |
 
 ## Arsitektur
 
@@ -53,6 +53,10 @@ React SPA --REST/Sanctum--> Laravel API --SQL--> PostgreSQL
 4. Import workflow JSON dari `n8n/workflows` melalui editor n8n. Aktifkan workflow WF1/WF3 untuk menerima event dan WF2 untuk polling terjadwal. Set `NUSAERP_AUTOMATION_TOKEN` pada service n8n agar sama dengan `AUTOMATION_TOKEN` backend.
 
 Compose menjalankan migrasi dan seeder saat backend dimulai. Data PostgreSQL disimpan di named volume `postgres_data`.
+
+### Satu Container
+
+Jika perlu mengemas PostgreSQL, backend, frontend, n8n, dan Cloudflare Tunnel dalam satu container, gunakan [panduan single-container](docs/single-container.md) dan `docker-compose.single.yml`. Ini mode opsional; Compose multi-service di atas tetap menjadi konfigurasi utama.
 
 ## Menjalankan backend lokal
 
@@ -112,7 +116,8 @@ Untuk menjalankan image n8n secara mandiri lewat Docker Desktop dan mengimpor wo
 
 ## Validasi Terakhir
 
-- Backend test suite: 21 test, 71 assertion lulus.
+- Automation dan purchase-order feature tests: 8 test, 23 assertion lulus dengan SQLite in-memory.
 - Frontend production build berhasil; Vite masih memberi warning ukuran chunk di atas 500 kB.
-- Compose syntax dan JSON/graph ketiga workflow lolos pemeriksaan statis.
-- Runtime `docker compose up` dan import/aktivasi n8n belum diuji karena Docker daemon/socket tidak tersedia pada mesin pengembangan ini.
+- Compose dijalankan pada project terisolasi dengan PostgreSQL volume baru; PostgreSQL sehat, backend `/up`, frontend, dan n8n `/healthz` merespons.
+- Request dari container n8n ke backend low-stock mendapat HTTP 200 dan mengembalikan produk seeder `SKU-002` (stok 4, minimum 5). WF2 tetap perlu diimpor/diaktifkan pada database n8n; pengiriman pesan eksternal belum dikonfigurasi.
+- Image single-container berhasil dibangun dan dijalankan dengan volume persisten; ERP `/up`, n8n `/healthz`, login demo, dan endpoint low-stock lulus. Cloudflare Tunnel binary tersedia; koneksi tunnel belum diuji karena token Cloudflare belum diberikan.

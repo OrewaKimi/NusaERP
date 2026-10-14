@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+!.env.example
+!.env.single.example
+backend/.env
+backend/.env.*
+backend/vendor
+backend/node_modules
+backend/storage/logs/*
+backend/bootstrap/cache/*.php
+frontend/node_modules
+frontend/dist
+n8n/data
+n8n/database.sqlite*
+Dockerfile.single
+docker-compose*.yml
